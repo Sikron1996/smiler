@@ -7,7 +7,6 @@ const READ_RPC = "https://ethereum.publicnode.com";
 
 const ABI = [
   "function mint(uint256 amount) external payable",
-  "function freeMint() external",
   "function PRICE() view returns (uint256)",
   "function totalSupply() view returns (uint256)",
   "function freeMintUsed(address user) view returns (bool)"
@@ -51,8 +50,6 @@ function initRead() {
 
   const link = $("etherscanLink");
   if (link) link.href = "https://etherscan.io/address/" + CONTRACT_ADDRESS;
-
-  return true;
 }
 
 async function loadSupply() {
@@ -70,9 +67,21 @@ async function updatePrice() {
   try {
     const price = await readContract.PRICE();
     const qty = BigInt(amount());
-    const total = price * qty;
 
-    text("totalPrice", ethers.formatEther(total) + " ETH");
+    const used = account
+      ? await readContract.freeMintUsed(account)
+      : false;
+
+    const paidQty = used
+      ? qty
+      : (qty > 0n ? qty - 1n : 0n);
+
+    const total = price * paidQty;
+
+    text(
+      "totalPrice",
+      total === 0n ? "FREE" : ethers.formatEther(total) + " ETH"
+    );
   } catch (e) {
     status("Price error: " + (e.shortMessage || e.message));
   }
@@ -93,7 +102,9 @@ async function setup(wp, acc) {
   $("mintBtn").style.display = "block";
 
   closeModal();
+
   await loadSupply();
+  await updatePrice();
 }
 
 async function connectBrowser() {
@@ -143,7 +154,13 @@ async function mint() {
     const qty = BigInt(amount());
     const price = await readContract.PRICE();
 
-    const value = price * qty;
+    const used = await readContract.freeMintUsed(account);
+
+    const paidQty = used
+      ? qty
+      : (qty > 0n ? qty - 1n : 0n);
+
+    const value = price * paidQty;
 
     status("Confirm mint...");
 
@@ -156,29 +173,7 @@ async function mint() {
     status("Mint success");
 
     await loadSupply();
-  } catch (e) {
-    status("Error: " + (e.shortMessage || e.message));
-  }
-}
-
-async function freeMint() {
-  try {
-    if (!contract) {
-      openModal();
-      return;
-    }
-
-    status("Confirm free mint...");
-
-    const tx = await contract.freeMint();
-
-    status("Tx: " + tx.hash);
-
-    await tx.wait();
-
-    status("Free mint success");
-
-    await loadSupply();
+    await updatePrice();
   } catch (e) {
     status("Error: " + (e.shortMessage || e.message));
   }
@@ -193,7 +188,6 @@ $("browserWalletBtn").onclick = connectBrowser;
 $("walletConnectBtn").onclick = connectWC;
 
 $("mintBtn").onclick = mint;
-$("freeMintBtn").onclick = freeMint;
 
 $("minus").onclick = async () => {
   $("amount").value = Math.max(1, amount() - 1);
