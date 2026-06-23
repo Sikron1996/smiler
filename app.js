@@ -17,6 +17,7 @@ let readProvider, readContract;
 let account, wcProvider;
 
 const $ = (id) => document.getElementById(id);
+
 const modal = $("walletModal");
 
 function text(id, value) {
@@ -24,8 +25,8 @@ function text(id, value) {
   if (el) el.textContent = value;
 }
 
-function status(m) {
-  text("status", m);
+function status(msg) {
+  text("status", msg);
 }
 
 function openModal() {
@@ -68,19 +69,11 @@ async function updatePrice() {
     const price = await readContract.PRICE();
     const qty = BigInt(amount());
 
-    const used = account
-      ? await readContract.freeMintUsed(account)
-      : false;
-
-    const paidQty = used
-      ? qty
-      : (qty > 0n ? qty - 1n : 0n);
-
-    const total = price * paidQty;
+    const total = price * qty;
 
     text(
       "totalPrice",
-      total === 0n ? "FREE" : ethers.formatEther(total) + " ETH"
+      ethers.formatEther(total) + " ETH"
     );
   } catch (e) {
     status("Price error: " + (e.shortMessage || e.message));
@@ -112,6 +105,7 @@ async function connectBrowser() {
     if (!window.ethereum) throw new Error("Wallet not found");
 
     const chainId = await window.ethereum.request({ method: "eth_chainId" });
+
     if (chainId !== "0x1") {
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
@@ -154,13 +148,7 @@ async function mint() {
     const qty = BigInt(amount());
     const price = await readContract.PRICE();
 
-    const used = await readContract.freeMintUsed(account);
-
-    const paidQty = used
-      ? qty
-      : (qty > 0n ? qty - 1n : 0n);
-
-    const value = price * paidQty;
+    const value = price * qty;
 
     status("Confirm mint...");
 
@@ -170,12 +158,13 @@ async function mint() {
 
     await tx.wait();
 
-    status("Mint success");
+    status("Mint successful");
 
     await loadSupply();
     await updatePrice();
+
   } catch (e) {
-    status("Error: " + (e.shortMessage || e.message));
+    status("Error: " + (e.reason || e.message));
   }
 }
 
